@@ -4,7 +4,7 @@ services:
     container_name: watchmatch-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8010:8010"
     volumes:
       # SQLite DB persists across container restarts
       - db_data:/app/data
@@ -14,7 +14,7 @@ services:
       # Optional: space-separated list of extra CORS origins
       EXTRA_ORIGINS: ${EXTRA_ORIGINS:-}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
