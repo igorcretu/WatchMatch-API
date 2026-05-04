@@ -4,7 +4,7 @@ Deployed on Raspberry Pi via Docker Compose.
 Exposed publicly via Cloudflare Tunnel at matchapi.crig.dev.
 
 Run locally:
-    uvicorn main:app --reload --port 8010
+    uvicorn main:app --reload --port 8050
 """
 import os
 from contextlib import asynccontextmanager
