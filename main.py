@@ -43,6 +43,7 @@ app = FastAPI(
     description="Couples movie-matching backend. Deployed on Raspberry Pi via Cloudflare Tunnel.",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 app.add_middleware(
