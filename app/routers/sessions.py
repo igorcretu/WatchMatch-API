@@ -39,7 +39,7 @@ DEFAULT_FILTERS: dict = {
 }
 
 
-@router.post("/", response_model=SessionOut, status_code=201)
+@router.post("", response_model=SessionOut, status_code=201)
 def create_session(
     body: SessionCreate,
     db: Session = Depends(get_session),
@@ -182,7 +182,7 @@ def almost_matched(
 
 # ---------- Presets ----------
 
-@router.get("/presets/", response_model=list[PresetOut])
+@router.get("/presets", response_model=list[PresetOut])
 def list_presets(
     db: Session = Depends(get_session),
     current: User = Depends(get_current_user),
@@ -191,7 +191,7 @@ def list_presets(
     return [_preset_out(p) for p in presets]
 
 
-@router.post("/presets/", response_model=PresetOut, status_code=201)
+@router.post("/presets", response_model=PresetOut, status_code=201)
 def create_preset(
     body: PresetIn,
     db: Session = Depends(get_session),

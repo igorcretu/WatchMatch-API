@@ -27,7 +27,7 @@ def movie_to_out(m: Movie) -> MovieOut:
 router = APIRouter(prefix="/movies", tags=["movies"])
 
 
-@router.get("/", response_model=list[MovieOut])
+@router.get("", response_model=list[MovieOut])
 def list_movies(
     genre: str | None = None,
     provider: str | None = None,
