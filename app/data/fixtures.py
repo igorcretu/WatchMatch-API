@@ -1,32 +1,42 @@
-"""Seed the DB with fixture movies on first startup."""
+"""Seed the DB with real movies on first startup. Enriches poster_path via TMDB if key is set."""
 from sqlmodel import Session, select
 from ..models.db_models import Movie
+from .tmdb import fetch_poster_path
 
 
 FIXTURE_MOVIES = [
-    Movie(id="m01", title="The Quiet Engine",     year=2023, runtime=118, rating=8.1, genres="Drama,Mystery",     synopsis="A retired engineer in rural Norway returns to a derelict factory to confront a sound only he can hear.", providers="Netflix",  hue=28,  variant="gradient",  mood="mind-bending"),
-    Movie(id="m02", title="Velvet Static",        year=2021, runtime=96,  rating=7.4, genres="Comedy,Romance",    synopsis="Two radio hosts in 1990s Bucharest pretend to be in love on air, and start to mean it.",              providers="HBO Max",  hue=350, variant="spotlight", mood="feel-good"),
-    Movie(id="m03", title="North of Memory",      year=2024, runtime=134, rating=8.4, genres="Drama,Sci-Fi",      synopsis="An archivist discovers a rented apartment that remembers every previous tenant, all at once.",          providers="HBO Max",  hue=220, variant="halftone",  mood="cerebral"),
-    Movie(id="m04", title="Bring The House Down", year=2022, runtime=102, rating=7.0, genres="Comedy,Action",     synopsis="A failing demolition crew accepts a job with complicated paperwork.",                                   providers="Netflix",  hue=18,  variant="bars",      mood="fun"),
-    Movie(id="m05", title="Ash Garden",           year=2020, runtime=124, rating=8.6, genres="Drama,Historical",  synopsis="A Japanese gardener tends a memorial in post-war Hiroshima for forty years and one season.",             providers="Mubi",     hue=40,  variant="gradient",  mood="meditative"),
-    Movie(id="m06", title="The Last Telephone",   year=2019, runtime=88,  rating=7.2, genres="Thriller,Mystery",  synopsis="A booth on a Welsh cliff begins to ring. The number is yours, twelve years from now.",                   providers="Disney+",  hue=280, variant="stripes",   mood="tense"),
-    Movie(id="m07", title="Fluorescence",         year=2024, runtime=109, rating=7.8, genres="Sci-Fi,Romance",    synopsis="Two strangers meet at a bioluminescence research lab on the night the lights go wrong.",                  providers="Netflix",  hue=180, variant="spotlight", mood="dreamy"),
-    Movie(id="m08", title="Catch the Moonshade",  year=2018, runtime=145, rating=8.0, genres="Adventure,Family",  synopsis="A Romanian girl, a one-eyed dog, and a moon that won't set on time.",                                   providers="Disney+",  hue=60,  variant="gradient",  mood="feel-good"),
-    Movie(id="m09", title="Concrete Lullaby",     year=2023, runtime=99,  rating=7.6, genres="Drama,Music",       synopsis="A noise musician inherits her late mother's tape collection, and starts playing it backward.",            providers="Mubi",     hue=320, variant="halftone",  mood="melancholy"),
-    Movie(id="m10", title="Hotel Pacific",        year=2025, runtime=116, rating=7.9, genres="Mystery,Drama",     synopsis="A night manager suspects Room 312 is not in the same building as the rest of the hotel.",                 providers="HBO Max",  hue=200, variant="spotlight", mood="noir"),
-    Movie(id="m11", title="How to Lose a War",    year=2017, runtime=128, rating=8.2, genres="Comedy,Drama",      synopsis="A retired general accidentally writes a self-help bestseller and has to live up to it.",                   providers="Netflix",  hue=100, variant="bars",      mood="witty"),
-    Movie(id="m12", title="Glassland",            year=2022, runtime=107, rating=7.5, genres="Drama,Thriller",    synopsis="A glassblower in a closing factory takes the night shift and finds someone else has already started it.", providers="Mubi",     hue=240, variant="gradient",  mood="tense"),
-    Movie(id="m13", title="Soft Crash",           year=2024, runtime=94,  rating=7.1, genres="Romance,Comedy",    synopsis="Two strangers crash electric scooters into each other every Tuesday for six months.",                     providers="Netflix",  hue=8,   variant="spotlight", mood="cozy"),
-    Movie(id="m14", title="The Inheritor",        year=2021, runtime=138, rating=8.3, genres="Drama,Historical",  synopsis="An estate, a brother, a sister, and a forest that keeps moving the property line.",                      providers="HBO Max",  hue=50,  variant="gradient",  mood="epic"),
-    Movie(id="m15", title="Spinwave",             year=2023, runtime=91,  rating=6.9, genres="Action,Sci-Fi",     synopsis="A skateboarder bends time three seconds at a time. It is enough, and it is not.",                        providers="Disney+",  hue=295, variant="halftone",  mood="fun"),
-    Movie(id="m16", title="Coastline Etiquette",  year=2020, runtime=86,  rating=7.3, genres="Comedy,Romance",    synopsis="A finishing school relocates to an oil rig. Manners persist.",                                          providers="Mubi",     hue=165, variant="stripes",   mood="feel-good"),
+    Movie(id="m01", title="Inception",                          year=2010, runtime=148, rating=8.8, genres="Action,Sci-Fi,Thriller",    synopsis="A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea.",     providers="Max",           hue=220, variant="halftone",  mood="mind-bending"),
+    Movie(id="m02", title="Parasite",                           year=2019, runtime=132, rating=8.5, genres="Comedy,Drama,Thriller",      synopsis="Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.", providers="Max",           hue=120, variant="spotlight", mood="tense"),
+    Movie(id="m03", title="Interstellar",                       year=2014, runtime=169, rating=8.6, genres="Adventure,Drama,Sci-Fi",     synopsis="A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival.",                     providers="Paramount+",    hue=200, variant="gradient",  mood="cerebral"),
+    Movie(id="m04", title="La La Land",                         year=2016, runtime=128, rating=8.0, genres="Drama,Music,Romance",        synopsis="While navigating their careers in Los Angeles, a pianist and an actress fall in love while attempting to reconcile their aspirations with the realities of life.", providers="Netflix",       hue=280, variant="spotlight", mood="dreamy"),
+    Movie(id="m05", title="The Dark Knight",                    year=2008, runtime=152, rating=9.0, genres="Action,Crime,Drama",         synopsis="When the menace known as the Joker wreaks havoc and chaos on the people of Gotham, Batman must accept one of the greatest psychological and physical tests of his ability to fight injustice.", providers="Max",           hue=210, variant="gradient",  mood="epic"),
+    Movie(id="m06", title="Everything Everywhere All at Once",  year=2022, runtime=139, rating=7.8, genres="Action,Adventure,Comedy",    synopsis="A middle-aged Chinese immigrant is swept up in an insane adventure in which she alone can save existence by exploring other universes.", providers="Showtime",      hue=350, variant="bars",      mood="mind-bending"),
+    Movie(id="m07", title="Her",                                year=2013, runtime=126, rating=8.0, genres="Drama,Romance,Sci-Fi",       synopsis="In a near future, a lonely writer develops an unlikely relationship with an operating system designed to meet his every need.", providers="Max",           hue=25,  variant="gradient",  mood="melancholy"),
+    Movie(id="m08", title="Get Out",                            year=2017, runtime=104, rating=7.7, genres="Horror,Mystery,Thriller",    synopsis="A young African-American visits his white girlfriend's parents for the weekend, where his simmering uneasiness about their reception of him eventually reaches a boiling point.", providers="Peacock",       hue=140, variant="gradient",  mood="tense"),
+    Movie(id="m09", title="Knives Out",                         year=2019, runtime=130, rating=7.9, genres="Comedy,Crime,Drama",         synopsis="A detective investigates the death of a patriarch of an eccentric, combative family.",                                      providers="Prime Video",   hue=40,  variant="halftone",  mood="witty"),
+    Movie(id="m10", title="The Grand Budapest Hotel",           year=2014, runtime=99,  rating=8.1, genres="Adventure,Comedy,Crime",     synopsis="The adventures of Gustave H, a legendary concierge at a famous hotel in the fictional Republic of Zubrowka.",               providers="Max",           hue=330, variant="spotlight", mood="feel-good"),
+    Movie(id="m11", title="Mad Max: Fury Road",                 year=2015, runtime=120, rating=8.1, genres="Action,Adventure,Sci-Fi",    synopsis="In a post-apocalyptic wasteland, a woman rebels against a tyrannical ruler in search for her homeland.",                     providers="Max",           hue=30,  variant="bars",      mood="fun"),
+    Movie(id="m12", title="Whiplash",                           year=2014, runtime=107, rating=8.5, genres="Drama,Music",                synopsis="A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing to realize a student's potential.", providers="Netflix",       hue=10,  variant="gradient",  mood="tense"),
+    Movie(id="m13", title="Moonlight",                          year=2016, runtime=111, rating=7.4, genres="Drama",                      synopsis="A young African-American man grapples with his identity and sexuality while experiencing the hardships of childhood, adolescence, and burgeoning adulthood.", providers="Prime Video",   hue=200, variant="spotlight", mood="melancholy"),
+    Movie(id="m14", title="Spirited Away",                      year=2001, runtime=125, rating=8.6, genres="Animation,Adventure,Family", synopsis="During her family's move to the suburbs, a sullen 10-year-old girl wanders into a world ruled by gods, witches, and spirits.",  providers="Max",           hue=180, variant="gradient",  mood="dreamy"),
+    Movie(id="m15", title="Portrait of a Lady on Fire",         year=2019, runtime=122, rating=8.1, genres="Drama,History,Romance",      synopsis="On an isolated island in Brittany at the end of the eighteenth century, a female painter is obliged to paint a wedding portrait of a young woman.", providers="Mubi",          hue=20,  variant="stripes",   mood="cerebral"),
+    Movie(id="m16", title="Hereditary",                         year=2018, runtime=127, rating=7.3, genres="Drama,Horror,Mystery",       synopsis="A grieving family is haunted by tragic and disturbing occurrences after the death of their secretive grandmother.",            providers="Max",           hue=55,  variant="halftone",  mood="tense"),
 ]
 
 
 def seed_movies(db: Session) -> None:
-    existing = db.exec(select(Movie)).first()
-    if existing:
-        return  # Already seeded
     for movie in FIXTURE_MOVIES:
-        db.add(movie)
+        if not db.get(Movie, movie.id):
+            db.add(movie)
     db.commit()
+
+    # Fill in any missing poster paths via TMDB (only if API key configured)
+    movies_missing_poster = db.exec(
+        select(Movie).where(Movie.poster_path == "")
+    ).all()
+    if movies_missing_poster:
+        for m in movies_missing_poster:
+            path = fetch_poster_path(m.title, m.year)
+            if path:
+                m.poster_path = path
+        db.commit()

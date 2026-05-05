@@ -13,6 +13,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY env var is required}
       # Optional: space-separated list of extra CORS origins
       EXTRA_ORIGINS: ${EXTRA_ORIGINS:-}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/health')"]
       interval: 30s
