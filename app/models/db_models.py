@@ -1,5 +1,4 @@
 """SQLModel table models — these map directly to SQLite tables."""
-from __future__ import annotations
 import uuid
 from typing import Optional
 from sqlmodel import Field, SQLModel, Relationship
