@@ -12,19 +12,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 
-from app.db import create_db_and_tables, engine
+from app import db as _db
 from app.data.fixtures import seed_movies
-from app.routers import auth, movies, sessions, users
+from app.routers import auth, movies, sessions, users, groups
 
 ALLOWED_ORIGINS = [
     "http://localhost:4200",
     "http://localhost:3000",
-    "https://*.netlify.app",
+    "https://watchmatch.crig.dev",
     "https://matchapi.crig.dev",
-    # Add your Netlify site URL here once you have it
 ]
 
-# Additional origins from env (space-separated)
 extra = os.getenv("EXTRA_ORIGINS", "")
 if extra:
     ALLOWED_ORIGINS.extend(extra.split())
@@ -32,8 +30,9 @@ if extra:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    create_db_and_tables()
-    with Session(engine) as db:
+    _db.create_db_and_tables()
+    _db.run_migrations()
+    with Session(_db.engine) as db:
         seed_movies(db)
     yield
 
@@ -59,6 +58,7 @@ app.include_router(auth.router,     prefix="/api")
 app.include_router(movies.router,   prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(users.router,    prefix="/api")
+app.include_router(groups.router,   prefix="/api")
 
 
 @app.get("/health")

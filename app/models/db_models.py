@@ -16,6 +16,8 @@ class User(SQLModel, table=True):
     hashed_password: str
     hue: int = 30
     partner_id: Optional[str] = Field(default=None, foreign_key="users.id")
+    invite_token: Optional[str] = Field(default=None)
+    theme: str = Field(default="dark")
 
     swipes: list["SwipeRecord"] = Relationship(back_populates="user")
     presets: list["SessionPreset"] = Relationship(back_populates="user")
@@ -35,6 +37,8 @@ class Movie(SQLModel, table=True):
     hue: int = 30
     variant: str = "gradient"
     mood: str = ""
+    content_type: str = Field(default="movie")
+    language: str = Field(default="en")
 
 
 class Session(SQLModel, table=True):
@@ -44,6 +48,7 @@ class Session(SQLModel, table=True):
     partner_id: Optional[str] = Field(default=None, foreign_key="users.id")
     status: str = "waiting"   # waiting | active | matched | no-match
     filters_json: str = "{}"  # Filters stored as JSON blob
+    content_type: str = Field(default="both")  # movie | series | both
     created_at: int = Field(default_factory=lambda: __import__("time").time_ns() // 1_000_000)
 
     swipes: list["SwipeRecord"] = Relationship(back_populates="session")
@@ -81,6 +86,7 @@ class QueueItem(SQLModel, table=True):
     movie_id: str = Field(foreign_key="movies.id")
     watched: bool = False
     added_at: int = Field(default_factory=lambda: __import__("time").time_ns() // 1_000_000)
+    sort_order: int = Field(default=0)
 
 
 class SessionPreset(SQLModel, table=True):
@@ -91,3 +97,23 @@ class SessionPreset(SQLModel, table=True):
     filters_json: str = "{}"
 
     user: Optional[User] = Relationship(back_populates="presets")
+
+
+class Group(SQLModel, table=True):
+    __tablename__ = "groups"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    name: str
+    creator_id: str = Field(foreign_key="users.id")
+    invite_code: str = Field(default_factory=lambda: str(uuid.uuid4())[:8].upper())
+    session_id: Optional[str] = Field(default=None, foreign_key="sessions.id")
+
+    members: list["GroupMember"] = Relationship(back_populates="group")
+
+
+class GroupMember(SQLModel, table=True):
+    __tablename__ = "group_members"
+    id: str = Field(default_factory=new_id, primary_key=True)
+    group_id: str = Field(foreign_key="groups.id", index=True)
+    user_id: str = Field(foreign_key="users.id")
+
+    group: Optional[Group] = Relationship(back_populates="members")

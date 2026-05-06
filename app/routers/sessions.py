@@ -8,7 +8,7 @@ from ..models.db_models import (
 )
 from ..models.schemas import (
     SessionCreate, SessionOut, SwipeIn, MatchResult, FiltersIn,
-    PresetIn, PresetOut, MovieOut
+    PresetIn, PresetOut, MovieOut, SwipeReplayItem,
 )
 from ..auth import get_current_user
 from .movies import movie_to_out
@@ -26,18 +26,65 @@ DEFAULT_FILTERS: dict = {
         {"label": "Adventure", "state": "nice"}, {"label": "Music", "state": "nice"},
         {"label": "Family", "state": "nice"},
     ],
-    "year_min": 2015, "year_max": 2025, "rating_min": 6.5, "runtime_max": 180,
+    "year_min": 2000, "year_max": 2025, "rating_min": 6.0, "runtime_max": 200,
     "providers": [
-        {"label": "Netflix", "state": "nice"}, {"label": "HBO Max", "state": "nice"},
+        {"label": "Netflix", "state": "nice"}, {"label": "Max", "state": "nice"},
         {"label": "Disney+", "state": "nice"}, {"label": "Mubi", "state": "nice"},
+        {"label": "Prime Video", "state": "nice"}, {"label": "Peacock", "state": "nice"},
+        {"label": "Showtime", "state": "nice"}, {"label": "Paramount+", "state": "nice"},
     ],
     "moods": [
         {"label": "feel-good", "state": "nice"}, {"label": "tense", "state": "nice"},
         {"label": "cerebral", "state": "nice"}, {"label": "dreamy", "state": "nice"},
-        {"label": "cozy", "state": "nice"},
+        {"label": "cozy", "state": "nice"}, {"label": "epic", "state": "nice"},
+        {"label": "melancholy", "state": "nice"}, {"label": "mind-bending", "state": "nice"},
+        {"label": "witty", "state": "nice"}, {"label": "fun", "state": "nice"},
     ],
 }
 
+
+# ---------- Presets (MUST come before /{session_id} routes to avoid route conflict) ----------
+
+@router.get("/presets", response_model=list[PresetOut])
+def list_presets(
+    db: Session = Depends(get_session),
+    current: User = Depends(get_current_user),
+):
+    presets = db.exec(select(SessionPreset).where(SessionPreset.user_id == current.id)).all()
+    return [_preset_out(p) for p in presets]
+
+
+@router.post("/presets", response_model=PresetOut, status_code=201)
+def create_preset(
+    body: PresetIn,
+    db: Session = Depends(get_session),
+    current: User = Depends(get_current_user),
+):
+    preset = SessionPreset(
+        user_id=current.id,
+        name=body.name,
+        filters_json=body.filters.model_dump_json(),
+    )
+    db.add(preset)
+    db.commit()
+    db.refresh(preset)
+    return _preset_out(preset)
+
+
+@router.delete("/presets/{preset_id}", status_code=204)
+def delete_preset(
+    preset_id: str,
+    db: Session = Depends(get_session),
+    current: User = Depends(get_current_user),
+):
+    preset = db.get(SessionPreset, preset_id)
+    if not preset or preset.user_id != current.id:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    db.delete(preset)
+    db.commit()
+
+
+# ---------- Sessions ----------
 
 @router.post("", response_model=SessionOut, status_code=201)
 def create_session(
@@ -45,10 +92,12 @@ def create_session(
     db: Session = Depends(get_session),
     current: User = Depends(get_current_user),
 ):
+    partner_id = None if body.solo else (body.partner_id if body.partner_id is not None else current.partner_id)
     session = SessionModel(
         user_id=current.id,
-        partner_id=body.partner_id or current.partner_id,
+        partner_id=partner_id,
         filters_json=json.dumps(DEFAULT_FILTERS),
+        content_type=body.content_type,
     )
     db.add(session)
     db.commit()
@@ -57,7 +106,7 @@ def create_session(
 
 
 @router.get("/{session_id}", response_model=SessionOut)
-def get_session(
+def get_session_by_id(
     session_id: str,
     db: Session = Depends(get_session),
     current: User = Depends(get_current_user),
@@ -113,7 +162,6 @@ def record_swipe(
     )
     db.add(record)
 
-    # Add to queue on like/super
     if swipe.action in ("like", "super"):
         existing_q = db.exec(
             select(QueueItem).where(
@@ -124,7 +172,7 @@ def record_swipe(
         if not existing_q:
             db.add(QueueItem(user_id=current.id, movie_id=swipe.movie_id))
 
-        # Count likes in this session for this user
+        # Count existing likes for this user in this session (before this swipe commits)
         like_count = db.exec(
             select(SwipeRecord).where(
                 SwipeRecord.session_id == session_id,
@@ -133,7 +181,15 @@ def record_swipe(
             )
         ).all()
 
-        if (len(like_count) + 1) % MATCH_EVERY_N == 0:
+        # Avoid duplicate matches for same movie
+        already_matched = db.exec(
+            select(Match).where(
+                Match.session_id == session_id,
+                Match.movie_id == swipe.movie_id,
+            )
+        ).first()
+
+        if not already_matched and len(like_count) % MATCH_EVERY_N == 0:
             movie = db.get(Movie, swipe.movie_id)
             match = Match(session_id=session_id, movie_id=swipe.movie_id)
             db.add(match)
@@ -156,7 +212,7 @@ def almost_matched(
     db: Session = Depends(get_session),
     current: User = Depends(get_current_user),
 ):
-    """Movies the current user liked but were not mutually matched."""
+    """Movies the current user liked that were not mutually matched."""
     s = _get_or_404(session_id, db)
     _assert_participant(s, current.id)
 
@@ -180,45 +236,31 @@ def almost_matched(
     return almost
 
 
-# ---------- Presets ----------
-
-@router.get("/presets", response_model=list[PresetOut])
-def list_presets(
+@router.get("/{session_id}/replay", response_model=list[SwipeReplayItem])
+def session_replay(
+    session_id: str,
     db: Session = Depends(get_session),
     current: User = Depends(get_current_user),
 ):
-    presets = db.exec(select(SessionPreset).where(SessionPreset.user_id == current.id)).all()
-    return [_preset_out(p) for p in presets]
+    """Full swipe history for a session — visible to participants only."""
+    s = _get_or_404(session_id, db)
+    _assert_participant(s, current.id)
 
+    swipes = db.exec(
+        select(SwipeRecord).where(SwipeRecord.session_id == session_id)
+    ).all()
 
-@router.post("/presets", response_model=PresetOut, status_code=201)
-def create_preset(
-    body: PresetIn,
-    db: Session = Depends(get_session),
-    current: User = Depends(get_current_user),
-):
-    preset = SessionPreset(
-        user_id=current.id,
-        name=body.name,
-        filters_json=body.filters.model_dump_json(),
-    )
-    db.add(preset)
-    db.commit()
-    db.refresh(preset)
-    return _preset_out(preset)
-
-
-@router.delete("/presets/{preset_id}", status_code=204)
-def delete_preset(
-    preset_id: str,
-    db: Session = Depends(get_session),
-    current: User = Depends(get_current_user),
-):
-    preset = db.get(SessionPreset, preset_id)
-    if not preset or preset.user_id != current.id:
-        raise HTTPException(status_code=404, detail="Preset not found")
-    db.delete(preset)
-    db.commit()
+    result = []
+    for sw in swipes:
+        movie = db.get(Movie, sw.movie_id)
+        result.append(SwipeReplayItem(
+            movie_id=sw.movie_id,
+            movie_title=movie.title if movie else sw.movie_id,
+            action=sw.action,
+            user_id=sw.user_id,
+            timestamp=sw.timestamp,
+        ))
+    return result
 
 
 # ---------- helpers ----------
@@ -242,6 +284,7 @@ def _session_out(s: SessionModel) -> SessionOut:
         partner_id=s.partner_id,
         status=s.status,
         created_at=s.created_at,
+        content_type=s.content_type,
     )
 
 
